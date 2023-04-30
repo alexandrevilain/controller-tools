@@ -26,3 +26,5 @@ out
 *~
 .vscode
 .DS_Store
+
+dist/
