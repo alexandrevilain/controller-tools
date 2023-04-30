@@ -18,10 +18,13 @@
 package reconciler_test
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,6 +50,13 @@ var _ = BeforeSuite(func() {
 
 	c, err = client.New(cfg, client.Options{})
 	Expect(err).NotTo(HaveOccurred())
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: metav1.NamespaceDefault,
+		},
+	}
+	Expect(c.Create(context.TODO(), ns)).NotTo(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {

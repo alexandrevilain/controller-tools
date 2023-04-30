@@ -85,7 +85,7 @@ func TestHelperPatch(t *testing.T) {
 				}
 			},
 			validatePatch: func(tt *testing.T, o client.Object) {
-				assert.Equal(tt, o.(*appsv1.Deployment).Status.ObservedGeneration, 42)
+				assert.Equal(tt, o.(*appsv1.Deployment).Status.ObservedGeneration, int64(42))
 			},
 		},
 		"works with only spec update": {
@@ -121,7 +121,7 @@ func TestHelperPatch(t *testing.T) {
 			},
 			validatePatch: func(tt *testing.T, o client.Object) {
 				assert.Equal(tt, o.(*appsv1.Deployment).Spec.Paused, true)
-				assert.Equal(tt, o.(*appsv1.Deployment).Status.ObservedGeneration, 42)
+				assert.Equal(tt, o.(*appsv1.Deployment).Status.ObservedGeneration, int64(42))
 			},
 		},
 	}
