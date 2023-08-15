@@ -41,7 +41,7 @@ var _ = Describe("Reconciler", func() {
 	Describe("BuildersReconciler", func() {
 		var deploy *appsv1.Deployment
 		var builders []resource.Builder
-		var rec *reconciler.BuildersReconciler
+		var rec *reconciler.Reconciler
 		var owner *appsv1.Deployment
 
 		BeforeEach(func() {
@@ -63,7 +63,7 @@ var _ = Describe("Reconciler", func() {
 			discoveryManager, err := discovery.NewManager(cfg, c.Scheme())
 			Expect(err).ToNot(HaveOccurred())
 
-			rec = &reconciler.BuildersReconciler{
+			rec = &reconciler.Reconciler{
 				Client:    c,
 				Scheme:    c.Scheme(),
 				Recorder:  record.NewFakeRecorder(512),
@@ -72,7 +72,7 @@ var _ = Describe("Reconciler", func() {
 		})
 
 		It("creates a new object if one doesn't exists", func() {
-			statuses, reconcileAfter, err := rec.Reconcile(context.TODO(), owner, builders)
+			statuses, reconcileAfter, err := rec.ReconcileBuilders(context.TODO(), owner, builders)
 
 			By("returning no error")
 			Expect(err).NotTo(HaveOccurred())
@@ -93,7 +93,7 @@ var _ = Describe("Reconciler", func() {
 
 		It("updates existing object", func() {
 			var scale int32 = 2
-			statuses, reconcileAfter, err := rec.Reconcile(context.TODO(), owner, builders)
+			statuses, reconcileAfter, err := rec.ReconcileBuilders(context.TODO(), owner, builders)
 			By("returning no error")
 			Expect(err).NotTo(HaveOccurred())
 			By("returning no reconcile after")
@@ -107,7 +107,7 @@ var _ = Describe("Reconciler", func() {
 				deploy.Spec.Replicas = &scale
 			}
 
-			statuses, reconcileAfter, err = rec.Reconcile(context.TODO(), owner, builders)
+			statuses, reconcileAfter, err = rec.ReconcileBuilders(context.TODO(), owner, builders)
 			By("returning no error")
 			Expect(err).NotTo(HaveOccurred())
 			By("returning no reconcile after")

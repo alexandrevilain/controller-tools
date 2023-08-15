@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sort"
 	"time"
 
 	"github.com/alexandrevilain/controller-tools/pkg/discovery"
@@ -42,45 +41,35 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-type BuildersReconciler struct {
+type Reconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	Recorder  record.EventRecorder
 	Discovery discovery.Manager
 }
 
-type Resource struct {
+type reconcileResource struct {
 	builder resource.Builder
 	current client.Object
 	found   bool
 }
 
-func (r *BuildersReconciler) Reconcile(ctx context.Context, owner client.Object, builders []resource.Builder) ([]*resource.Status, time.Duration, error) {
+func (r *Reconciler) ReconcileBuilder(ctx context.Context, owner client.Object, builder resource.Builder) (client.Object, error) {
+	res := builder.Build()
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, res, func() error {
+		return builder.Update(res)
+	})
+	r.logAndRecordOperationResult(ctx, owner, res, result, err)
+	return res, err
+}
+
+func (r *Reconciler) ReconcileBuilders(ctx context.Context, owner client.Object, builders []resource.Builder) ([]*resource.Status, time.Duration, error) {
 	logger := log.FromContext(ctx)
 
-	resources, err := r.getResourcesFromBuilders(ctx, builders)
+	resources, err := r.getReconcileResourceFromBuilders(ctx, builders)
 	if err != nil {
 		return nil, 0, err
 	}
-
-	// Sort resources by their dependencies. The objective is to run builders without dependencies first
-	// as they could be dependent for another builders.
-	// We may have the need for a graph, but looks like it would work as expected for now.
-	sort.Slice(resources, func(i, j int) bool {
-		iDependentBuilder, iHasDependent := resources[i].builder.(resource.DependentBuilder)
-		jDependentBuilder, jHasDependent := resources[j].builder.(resource.DependentBuilder)
-		// If both have dependences, sort by dependencies length.
-		if iHasDependent && jHasDependent {
-			return len(iDependentBuilder.Dependencies()) < len(jDependentBuilder.Dependencies())
-		}
-
-		// If i has dependencies but not j, i should be after j.
-		if iHasDependent && !jHasDependent {
-			return false
-		}
-		// Otherwise i could be before j, it doesn't matter.
-		return true
-	})
 
 	logger.Info("Reconciling resources", "count", len(resources))
 
@@ -105,36 +94,6 @@ func (r *BuildersReconciler) Reconcile(ctx context.Context, owner client.Object,
 			err := equality.Semantic.AddFunc(comparer.Equal)
 			if err != nil {
 				return nil, 0, err
-			}
-		}
-
-		if dependent, ok := res.builder.(resource.DependentBuilder); ok {
-			for _, dependency := range dependent.Dependencies() {
-				dependency := dependency
-				objectKey := client.ObjectKey{
-					Name:      dependency.Name,
-					Namespace: dependency.Namespace,
-				}
-				logger.Info("Checking builder dependency",
-					"builder", fmt.Sprintf("%T", res.builder),
-					"dependency", objectKey,
-				)
-				err := r.Client.Get(ctx, objectKey, dependency.Object)
-				if err != nil {
-					if apierrors.IsNotFound(err) {
-						return nil, 5 * time.Second, nil
-					}
-					return nil, 0, err
-				}
-
-				status, err := r.getResourceStatus(dependency.Object)
-				if err != nil {
-					return nil, 0, err
-				}
-
-				if !status.Ready {
-					return nil, 5 * time.Second, nil
-				}
 			}
 		}
 
@@ -182,14 +141,14 @@ func (r *BuildersReconciler) Reconcile(ctx context.Context, owner client.Object,
 	return statuses, 0, nil
 }
 
-func (r *BuildersReconciler) getResourceStatus(res client.Object) (*resource.Status, error) {
-	udeploy, err := runtime.DefaultUnstructuredConverter.ToUnstructured(res)
+func (r *Reconciler) getResourceStatus(res client.Object) (*resource.Status, error) {
+	uobj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(res)
 	if err != nil {
 		return nil, err
 	}
 
 	u := &unstructured.Unstructured{}
-	u.SetUnstructuredContent(udeploy)
+	u.SetUnstructuredContent(uobj)
 
 	status, err := kstatus.Compute(u)
 	if err != nil {
@@ -205,7 +164,7 @@ func (r *BuildersReconciler) getResourceStatus(res client.Object) (*resource.Sta
 	}, nil
 }
 
-func (r *BuildersReconciler) getType(gvk schema.GroupVersionKind) reflect.Type {
+func (r *Reconciler) getTypeFromGVK(gvk schema.GroupVersionKind) reflect.Type {
 	for typename, reflectType := range r.Scheme.KnownTypes(gvk.GroupVersion()) {
 		if typename == gvk.Kind {
 			return reflectType
@@ -214,10 +173,10 @@ func (r *BuildersReconciler) getType(gvk schema.GroupVersionKind) reflect.Type {
 	return nil
 }
 
-func (r *BuildersReconciler) getResourcesFromBuilders(ctx context.Context, builders []resource.Builder) ([]*Resource, error) {
+func (r *Reconciler) getReconcileResourceFromBuilders(ctx context.Context, builders []resource.Builder) ([]*reconcileResource, error) {
 	logger := log.FromContext(ctx)
 
-	result := []*Resource{}
+	result := []*reconcileResource{}
 
 	for _, builder := range builders {
 		res := builder.Build()
@@ -226,7 +185,7 @@ func (r *BuildersReconciler) getResourcesFromBuilders(ctx context.Context, build
 			return nil, err
 		}
 
-		objectType := r.getType(gvk)
+		objectType := r.getTypeFromGVK(gvk)
 		if objectType == nil {
 			return nil, fmt.Errorf("can't get type for %s", gvk)
 		}
@@ -256,7 +215,7 @@ func (r *BuildersReconciler) getResourcesFromBuilders(ctx context.Context, build
 			}
 		}
 
-		result = append(result, &Resource{
+		result = append(result, &reconcileResource{
 			builder: builder,
 			current: object,
 			found:   found,
@@ -267,7 +226,7 @@ func (r *BuildersReconciler) getResourcesFromBuilders(ctx context.Context, build
 }
 
 // logAndRecordOperationResult logs and records an event for the provided object operation result.
-func (r *BuildersReconciler) logAndRecordOperationResult(ctx context.Context, owner, resource runtime.Object, operationResult controllerutil.OperationResult, err error) {
+func (r *Reconciler) logAndRecordOperationResult(ctx context.Context, owner, resource runtime.Object, operationResult controllerutil.OperationResult, err error) {
 	logger := log.FromContext(ctx)
 
 	var (
