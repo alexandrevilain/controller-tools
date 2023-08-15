@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,14 +71,12 @@ var _ = Describe("Reconciler", func() {
 		})
 
 		It("creates a new object if one doesn't exists", func() {
-			statuses, reconcileAfter, err := rec.ReconcileBuilders(context.TODO(), owner, builders)
+			objects, err := rec.ReconcileBuilders(context.TODO(), owner, builders)
 
 			By("returning no error")
 			Expect(err).NotTo(HaveOccurred())
-			By("returning no reconcile after")
-			Expect(reconcileAfter).To(Equal(time.Duration(0)))
-			By("returning statuses")
-			Expect(statuses).To(HaveLen(1))
+			By("returning objects")
+			Expect(objects).To(HaveLen(1))
 
 			By("actually having the deployment created")
 			fetched := &appsv1.Deployment{}
@@ -93,13 +90,11 @@ var _ = Describe("Reconciler", func() {
 
 		It("updates existing object", func() {
 			var scale int32 = 2
-			statuses, reconcileAfter, err := rec.ReconcileBuilders(context.TODO(), owner, builders)
+			objects, err := rec.ReconcileBuilders(context.TODO(), owner, builders)
 			By("returning no error")
 			Expect(err).NotTo(HaveOccurred())
-			By("returning no reconcile after")
-			Expect(reconcileAfter).To(Equal(time.Duration(0)))
-			By("returning statuses")
-			Expect(statuses).To(HaveLen(1))
+			By("returning objects")
+			Expect(objects).To(HaveLen(1))
 
 			fakeDepBuilder := builders[0].(*fake.DeploymentBuilder)
 			fakeDepBuilder.MutateObject = func(o client.Object) {
@@ -107,13 +102,11 @@ var _ = Describe("Reconciler", func() {
 				deploy.Spec.Replicas = &scale
 			}
 
-			statuses, reconcileAfter, err = rec.ReconcileBuilders(context.TODO(), owner, builders)
+			objects, err = rec.ReconcileBuilders(context.TODO(), owner, builders)
 			By("returning no error")
 			Expect(err).NotTo(HaveOccurred())
-			By("returning no reconcile after")
-			Expect(reconcileAfter).To(Equal(time.Duration(0)))
-			By("returning statuses")
-			Expect(statuses).To(HaveLen(1))
+			By("returning objects")
+			Expect(objects).To(HaveLen(1))
 
 			By("actually having the deployment scaled")
 			fetched := &appsv1.Deployment{}

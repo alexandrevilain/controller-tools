@@ -19,10 +19,7 @@ package reconciler
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"reflect"
-	"time"
 
 	"github.com/alexandrevilain/controller-tools/pkg/discovery"
 	"github.com/alexandrevilain/controller-tools/pkg/resource"
@@ -30,11 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
-	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -63,17 +57,17 @@ func (r *Reconciler) ReconcileBuilder(ctx context.Context, owner client.Object, 
 	return res, err
 }
 
-func (r *Reconciler) ReconcileBuilders(ctx context.Context, owner client.Object, builders []resource.Builder) ([]*resource.Status, time.Duration, error) {
+func (r *Reconciler) ReconcileBuilders(ctx context.Context, owner client.Object, builders []resource.Builder) ([]client.Object, error) {
 	logger := log.FromContext(ctx)
 
 	resources, err := r.getReconcileResourceFromBuilders(ctx, builders)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	logger.Info("Reconciling resources", "count", len(resources))
 
-	statuses := []*resource.Status{}
+	objects := []client.Object{}
 
 	for _, res := range resources {
 		// If the builder isn't enabled, check if it needs to be deleted, then skip iteration.
@@ -82,7 +76,7 @@ func (r *Reconciler) ReconcileBuilders(ctx context.Context, owner client.Object,
 				err := r.Client.Delete(ctx, res.current)
 				r.logAndRecordOperationResult(ctx, owner, res.current, controllerutil.OperationResult("deleted"), err)
 				if err != nil {
-					return nil, 0, fmt.Errorf("can't delete resource: %w", err)
+					return nil, fmt.Errorf("can't delete resource: %w", err)
 				}
 			}
 
@@ -93,7 +87,7 @@ func (r *Reconciler) ReconcileBuilders(ctx context.Context, owner client.Object,
 		if comparer, ok := res.builder.(resource.Comparer); ok {
 			err := equality.Semantic.AddFunc(comparer.Equal)
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
 		}
 
@@ -102,13 +96,13 @@ func (r *Reconciler) ReconcileBuilders(ctx context.Context, owner client.Object,
 			res.current = res.builder.Build()
 			err := res.builder.Update(res.current)
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
 
 			err = r.Client.Create(ctx, res.current)
 			r.logAndRecordOperationResult(ctx, owner, res.current, controllerutil.OperationResultCreated, err)
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
 		}
 
@@ -117,60 +111,22 @@ func (r *Reconciler) ReconcileBuilders(ctx context.Context, owner client.Object,
 			before := res.current.DeepCopyObject()
 			err := res.builder.Update(res.current)
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
 
 			if !equality.Semantic.DeepEqual(before, res.current) {
 				err = r.Client.Update(ctx, res.current)
 				r.logAndRecordOperationResult(ctx, owner, res.current, controllerutil.OperationResultUpdated, err)
 				if err != nil {
-					return nil, 0, err
+					return nil, err
 				}
 			}
 		}
 
-		// Report status
-		status, err := r.getResourceStatus(res.current)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		statuses = append(statuses, status)
+		objects = append(objects, res.current)
 	}
 
-	return statuses, 0, nil
-}
-
-func (r *Reconciler) getResourceStatus(res client.Object) (*resource.Status, error) {
-	uobj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(res)
-	if err != nil {
-		return nil, err
-	}
-
-	u := &unstructured.Unstructured{}
-	u.SetUnstructuredContent(uobj)
-
-	status, err := kstatus.Compute(u)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resource.Status{
-		GVK:       res.GetObjectKind().GroupVersionKind(),
-		Name:      res.GetName(),
-		Namespace: res.GetNamespace(),
-		Labels:    res.GetLabels(),
-		Ready:     status.Status == kstatus.CurrentStatus,
-	}, nil
-}
-
-func (r *Reconciler) getTypeFromGVK(gvk schema.GroupVersionKind) reflect.Type {
-	for typename, reflectType := range r.Scheme.KnownTypes(gvk.GroupVersion()) {
-		if typename == gvk.Kind {
-			return reflectType
-		}
-	}
-	return nil
+	return objects, nil
 }
 
 func (r *Reconciler) getReconcileResourceFromBuilders(ctx context.Context, builders []resource.Builder) ([]*reconcileResource, error) {
@@ -185,14 +141,9 @@ func (r *Reconciler) getReconcileResourceFromBuilders(ctx context.Context, build
 			return nil, err
 		}
 
-		objectType := r.getTypeFromGVK(gvk)
-		if objectType == nil {
-			return nil, fmt.Errorf("can't get type for %s", gvk)
-		}
-
-		object, ok := reflect.New(objectType).Interface().(client.Object)
-		if !ok {
-			return nil, errors.New("can't create a new client.Object instance from known type")
+		object, err := resource.NewObjectFromGVK(gvk, r.Scheme)
+		if err != nil {
+			return nil, fmt.Errorf("can't create new object from %s GVK: %w", gvk, err)
 		}
 
 		supported, err := r.Discovery.IsGVKSupported(gvk)
