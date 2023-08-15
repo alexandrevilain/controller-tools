@@ -34,11 +34,6 @@ type Builder interface {
 	Update(client.Object) error
 }
 
-type DependentBuilder interface {
-	Builder
-	Dependencies() []*Dependency
-}
-
 // A Comparer provides a custom function to compare two resources returned
 // by a Builder.
 type Comparer interface {
