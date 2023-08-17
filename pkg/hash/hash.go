@@ -25,8 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Sha256Object returns provided object's sha256 hash.
-func Sha256Object(o client.Object) (string, error) {
+// Sha256 returns the sha256 hash of the json representation of the provided paramater.
+func Sha256(o any) (string, error) {
 	data, err := json.Marshal(o)
 	if err != nil {
 		return "", err
@@ -39,4 +39,10 @@ func Sha256Object(o client.Object) (string, error) {
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+// Deprecated: use Sha256.
+// Sha256Object returns provided object's sha256 hash.
+func Sha256Object(o client.Object) (string, error) {
+	return Sha256(o)
 }
