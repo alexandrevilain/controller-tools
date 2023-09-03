@@ -72,7 +72,7 @@ GOLANGCI_LINT_VERSION ?= v1.52.2
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT)
-$(GOLANGCI_LINT): $(GOLANGCI_LINT)
+$(GOLANGCI_LINT):
 	test -s $(LOCALBIN)/golangci-lint && $(LOCALBIN)/golangci-lint version | grep -q $(GOLANGCI_LINT_VERSION) || \
 	GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 

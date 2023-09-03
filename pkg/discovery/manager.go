@@ -41,7 +41,7 @@ type (
 
 	manager struct {
 		scheme *runtime.Scheme
-		client *discovery.DiscoveryClient
+		client discovery.DiscoveryInterface
 		cache  *cache
 	}
 )
@@ -68,7 +68,13 @@ func (m *manager) IsGVKSupported(gvk schema.GroupVersionKind) (bool, error) {
 
 	gvr, _ := apimeta.UnsafeGuessKindToResource(gvk)
 
-	return m.isGVRSupported(gvr)
+	supported, err := m.isGVRSupported(gvr)
+	if err != nil {
+		return supported, err
+	}
+
+	m.cache.Set(gvk, supported)
+	return supported, nil
 }
 
 // IsObjectSupported returns true if the provided object is supported by the cluster.
