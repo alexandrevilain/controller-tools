@@ -49,8 +49,7 @@ linters:
   - unused
   - usestdlibvars
   - whitespace
-  # Disabled for now, but will be enabled as soon as possible
-  # - unparam
+  - unparam
 
 linters-settings:
   ginkgolinter:
