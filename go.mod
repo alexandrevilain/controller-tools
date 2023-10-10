@@ -6,7 +6,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.13.0
 	github.com/onsi/gomega v1.28.0
 	github.com/stretchr/testify v1.8.4
-	k8s.io/api v0.27.4
+	k8s.io/api v0.28.2
 	k8s.io/apimachinery v0.28.2
 	k8s.io/client-go v0.27.4
 	sigs.k8s.io/cli-utils v0.35.0
