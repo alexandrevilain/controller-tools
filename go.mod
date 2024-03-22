@@ -3,7 +3,7 @@ module github.com/alexandrevilain/controller-tools
 go 1.20
 
 require (
-	github.com/onsi/ginkgo/v2 v2.16.0
+	github.com/onsi/ginkgo/v2 v2.17.0
 	github.com/onsi/gomega v1.32.0
 	github.com/stretchr/testify v1.9.0
 	k8s.io/api v0.27.4
