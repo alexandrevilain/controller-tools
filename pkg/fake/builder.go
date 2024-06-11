@@ -39,6 +39,7 @@ func (b *DeploymentBuilder) Build() client.Object {
 		},
 	}
 }
+
 func (b *DeploymentBuilder) Enabled() bool {
 	return b.IsEnabled
 }
