@@ -50,6 +50,7 @@ func NewHelper(obj client.Object, crClient client.Client) (*Helper, error) {
 }
 
 // Patch will attempt to patch the provided resource and its status.
+// Provided object is not mutated with the api server result.
 func (h *Helper) Patch(ctx context.Context, afterObject client.Object) error {
 	if isNil(afterObject) {
 		return errors.New("provided object is nil")
@@ -68,13 +69,15 @@ func (h *Helper) Patch(ctx context.Context, afterObject client.Object) error {
 	var errs []error
 
 	if !reflect.DeepEqual(before, after) {
-		if err := h.client.Patch(ctx, afterObject, client.MergeFrom(h.beforeObject)); err != nil {
+		obj := afterObject.DeepCopyObject().(client.Object)
+		if err := h.client.Patch(ctx, obj, client.MergeFrom(h.beforeObject)); err != nil {
 			errs = append(errs, fmt.Errorf("unable to patch object: %w", err))
 		}
 	}
 
 	if beforeStatus != nil && afterStatus != nil && !reflect.DeepEqual(beforeStatus, afterStatus) {
-		if err := h.client.Status().Patch(ctx, afterObject, client.MergeFrom(h.beforeObject)); err != nil {
+		obj := afterObject.DeepCopyObject().(client.Object)
+		if err := h.client.Status().Patch(ctx, obj, client.MergeFrom(h.beforeObject)); err != nil {
 			errs = append(errs, fmt.Errorf("unable to patch object status: %w", err))
 		}
 	}
