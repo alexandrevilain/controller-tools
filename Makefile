@@ -68,7 +68,7 @@ YQ ?= $(LOCALBIN)/yq
 
 ## Tool Versions
 GO_LICENSER_VERSION ?= v0.4.0
-GOLANGCI_LINT_VERSION ?= v1.52.2
+GOLANGCI_LINT_VERSION ?= v1.59.1
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT)
